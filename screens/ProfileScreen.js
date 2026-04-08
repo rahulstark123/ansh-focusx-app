@@ -1,6 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 function MetricCard({ title, value, suffix, wide }) {
   return (
@@ -28,6 +29,11 @@ export default function ProfileScreen({ navigation }) {
   const isCompact = width < 390 || height < 800;
   const insets = useSafeAreaInsets();
   const sidePadding = isCompact ? 12 : 16;
+
+  const handleLogout = async () => {
+    await AsyncStorage.multiRemove(['fx_user_id', 'fx_user_name']);
+    navigation.reset({ index: 0, routes: [{ name: 'FirstTimeUser' }] });
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -78,7 +84,7 @@ export default function ProfileScreen({ navigation }) {
 
         <Pressable
           style={styles.logoutRow}
-          onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Login' }] })}
+          onPress={handleLogout}
         >
           <Text style={styles.logoutLabel}>LOGOUT</Text>
           <Ionicons name="log-out-outline" size={18} color="#C99A8A" />

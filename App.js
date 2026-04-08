@@ -6,6 +6,7 @@ import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { enableScreens } from 'react-native-screens';
 import ActiveSessionScreen from './screens/ActiveSessionScreen';
+import FirstTimeUserScreen from './screens/FirstTimeUserScreen';
 import FocusFormScreen from './screens/FocusFormScreen';
 import LoginScreen from './screens/LoginScreen';
 import SignupScreen from './screens/SignupScreen';
@@ -46,6 +47,7 @@ export default function App() {
           }}
         >
           <Stack.Screen name="Splash" component={SplashScreen} />
+          <Stack.Screen name="FirstTimeUser" component={FirstTimeUserScreen} />
           <Stack.Screen name="MainTabs" component={TabNavigator} />
           <Stack.Screen name="FocusForm" component={FocusFormScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />

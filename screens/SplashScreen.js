@@ -1,11 +1,28 @@
 import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiFetch } from '../utils/api';
 
 export default function SplashScreen({ navigation }) {
   useEffect(() => {
-    const timer = setTimeout(() => {
-      navigation.replace('MainTabs');
+    const timer = setTimeout(async () => {
+      try {
+        const userId = await AsyncStorage.getItem('fx_user_id');
+        if (!userId) {
+          navigation.replace('FirstTimeUser');
+          return;
+        }
+
+        const userState = await apiFetch(`/auth/users/${userId}/first-time`);
+        if (userState.firstTime) {
+          navigation.replace('FirstTimeUser');
+        } else {
+          navigation.replace('MainTabs');
+        }
+      } catch (_error) {
+        navigation.replace('FirstTimeUser');
+      }
     }, 1700);
 
     return () => clearTimeout(timer);

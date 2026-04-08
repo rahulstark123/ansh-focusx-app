@@ -7,6 +7,80 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+app.post('/users/create', async (req, res) => {
+  const { fullName } = req.body || {};
+  const normalizedName = String(fullName || '').trim();
+  if (!normalizedName) {
+    return res.status(400).json({ error: 'fullName is required' });
+  }
+
+  try {
+    const created = await prisma.user.create({
+      data: { fullName: normalizedName, firstTime: true },
+      select: { id: true, fullName: true, firstTime: true },
+    });
+    return res.status(201).json(created);
+  } catch (error) {
+    if (error.code === 'P2002') {
+      return res.status(409).json({ error: 'fullName already exists' });
+    }
+    return res.status(500).json({ error: 'create_user_failed' });
+  }
+});
+
+app.post('/auth/name-login', async (req, res) => {
+  const { fullName } = req.body || {};
+  const normalizedName = String(fullName || '').trim();
+  if (!normalizedName) {
+    return res.status(400).json({ error: 'fullName is required' });
+  }
+
+  const existing = await prisma.user.findUnique({
+    where: { fullName: normalizedName },
+    select: { id: true, fullName: true, firstTime: true },
+  });
+
+  if (existing) {
+    return res.json(existing);
+  }
+
+  const created = await prisma.user.create({
+    data: { fullName: normalizedName },
+    select: { id: true, fullName: true, firstTime: true },
+  });
+
+  return res.status(201).json(created);
+});
+
+app.get('/auth/users/:id/first-time', async (req, res) => {
+  const { id } = req.params;
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true, firstTime: true },
+  });
+
+  if (!user) {
+    return res.status(404).json({ error: 'user_not_found' });
+  }
+
+  return res.json(user);
+});
+
+app.post('/auth/complete-first-time', async (req, res) => {
+  const { userId } = req.body || {};
+  if (!userId) {
+    return res.status(400).json({ error: 'userId is required' });
+  }
+
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { firstTime: false },
+    select: { id: true, fullName: true, firstTime: true },
+  });
+
+  return res.json(user);
+});
+
 app.get('/health', async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
