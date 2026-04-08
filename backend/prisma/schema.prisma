@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(cuid())
+  fullName      String
+  email         String         @unique
+  passwordHash  String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  sessions      FocusSession[]
+  streakRecords StreakRecord[]
+}
+
+model FocusSession {
+  id             String            @id @default(cuid())
+  objective      String
+  mode           SessionMode       @default(FOCUS)
+  plannedSeconds Int
+  startedAt      DateTime          @default(now())
+  endedAt        DateTime?
+  status         SessionStatus     @default(ACTIVE)
+  userId         String
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streakRecord   StreakRecord?
+}
+
+model StreakRecord {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  focusSessionId    String?  @unique
+  focusSession      FocusSession? @relation(fields: [focusSessionId], references: [id], onDelete: SetNull)
+  currentStreakDays Int      @default(0)
+  longestStreakDays Int      @default(0)
+  totalFocusMinutes Int      @default(0)
+  createdAt         DateTime @default(now())
+}
+
+enum SessionMode {
+  FOCUS
+  HYPER_FOCUS
+}
+
+enum SessionStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
