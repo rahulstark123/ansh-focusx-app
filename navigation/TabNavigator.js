@@ -4,7 +4,6 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AnalyticsScreen from '../screens/AnalyticsScreen';
 import HomeScreen from '../screens/HomeScreen';
-import PlaceholderScreen from '../screens/PlaceholderScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 
 const Tab = createBottomTabNavigator();
@@ -45,20 +44,6 @@ export default function TabNavigator() {
           ),
         }}
       />
-      <Tab.Screen
-        name="Deep Work"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon
-              focused={focused}
-              label="DEEP WORK"
-              icon={<MaterialCommunityIcons name="target" size={24} color={focused ? '#FFFFFF' : '#B5B5B5'} />}
-            />
-          ),
-        }}
-      >
-        {() => <PlaceholderScreen title="Deep Work" />}
-      </Tab.Screen>
       <Tab.Screen
         name="Analytics"
         component={AnalyticsScreen}

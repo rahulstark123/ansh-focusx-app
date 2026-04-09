@@ -1,10 +1,33 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useState } from 'react';
+import { apiFetch } from '../utils/api';
 
-export default function WeakScreen({ navigation }) {
+export default function WeakScreen({ navigation, route }) {
   const { width, height } = useWindowDimensions();
   const isCompact = width < 390 || height < 800;
+  const [isStopping, setIsStopping] = useState(false);
+
+  const handleStopSession = async () => {
+    if (isStopping) {
+      return;
+    }
+    setIsStopping(true);
+    try {
+      const sessionId = route?.params?.sessionId;
+      if (sessionId) {
+        await apiFetch(`/sessions/${sessionId}/abandon`, {
+          method: 'POST',
+        });
+      }
+    } catch (_error) {
+      // Even if API fails, continue UX flow.
+    } finally {
+      setIsStopping(false);
+      navigation.navigate('StreakLost');
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -41,9 +64,10 @@ export default function WeakScreen({ navigation }) {
 
         <Pressable
           style={styles.secondaryWrap}
-          onPress={() => navigation.navigate('StreakLost')}
+          onPress={handleStopSession}
+          disabled={isStopping}
         >
-          <Text style={styles.secondaryLabel}>I AM WEAK, STOP SESSION</Text>
+          <Text style={styles.secondaryLabel}>{isStopping ? 'STOPPING SESSION...' : 'I AM WEAK, STOP SESSION'}</Text>
           <View style={styles.secondaryUnderline} />
         </Pressable>
       </View>

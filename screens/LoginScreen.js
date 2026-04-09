@@ -2,6 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState } from 'react';
+import { syncSupabaseSessionToBackend } from '../utils/auth';
+import { supabase } from '../utils/supabase';
+import AppPopup from '../components/AppPopup';
 
 export default function LoginScreen({ navigation }) {
   const { width, height } = useWindowDimensions();
@@ -9,6 +12,84 @@ export default function LoginScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [popup, setPopup] = useState({ visible: false, title: '', message: '' });
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const showPopup = (title, message) => setPopup({ visible: true, title, message });
+  const closePopup = () => setPopup((prev) => ({ ...prev, visible: false }));
+
+  const handleResendVerification = async () => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      showPopup('Invalid email', 'Enter the same email you used for signup.');
+      return;
+    }
+    try {
+      setIsSubmitting(true);
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: cleanEmail,
+      });
+      if (error) throw error;
+      showPopup('Email sent', `Verification link sent to ${cleanEmail}.`);
+    } catch (error) {
+      showPopup('Could not send email', String(error?.message || 'Please try again.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleLogin = async () => {
+    const payload = {
+      email: email.trim().toLowerCase(),
+      password,
+    };
+
+    if (!payload.email || !emailRegex.test(payload.email)) {
+      showPopup('Invalid email', 'Please enter a valid email address.');
+      return;
+    }
+    if (!payload.password) {
+      showPopup('Missing password', 'Please enter your password.');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: payload.email,
+        password: payload.password,
+      });
+      if (error) throw error;
+      const accessToken = data?.session?.access_token;
+      if (!accessToken) throw new Error('missing_session');
+      await syncSupabaseSessionToBackend({ accessToken });
+      navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
+    } catch (error) {
+      const code = String(error?.code || '').toLowerCase();
+      const msg = String(error?.message || '').toLowerCase();
+      if (
+        code === 'invalid_credentials' ||
+        msg.includes('invalid credential') ||
+        msg.includes('invalid login') ||
+        msg.includes('email or password')
+      ) {
+        showPopup('Login failed', 'Incorrect email or password.');
+      } else if (msg.includes('email not confirmed') || msg.includes('email_not_confirmed')) {
+        showPopup('Verify email first', 'Please verify your email before login. You can resend verification below.');
+      } else if (msg.includes('401') || msg.includes('unauthorized')) {
+        showPopup('Login failed', 'Could not verify your session. Please try again.');
+      } else if (msg.includes('500') || msg.includes('network') || msg.includes('failed to fetch') || msg.includes('aborted')) {
+        showPopup('Connection issue', 'Check your internet and try again.');
+      } else {
+        showPopup('Login failed', 'Unable to login right now. Please try again.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
@@ -24,7 +105,7 @@ export default function LoginScreen({ navigation }) {
           <View style={styles.topSideButton} />
           <Text style={styles.topBrand}>FOCUSX</Text>
           <View style={styles.topSideButton}>
-            <Text style={styles.helpText}>HELP</Text>
+            
           </View>
         </View>
 
@@ -47,22 +128,35 @@ export default function LoginScreen({ navigation }) {
           />
 
           <Text style={styles.label}>PASSWORD</Text>
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            style={styles.input}
-            placeholder="MIN 8 CHARACTERS"
-            placeholderTextColor="#5F5F5F"
-            selectionColor="#FFFFFF"
-            secureTextEntry
-          />
+          <View style={styles.passwordWrap}>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              style={[styles.input, styles.passwordInput]}
+              placeholder="MIN 8 CHARACTERS"
+              placeholderTextColor="#5F5F5F"
+              selectionColor="#FFFFFF"
+              secureTextEntry={!showPassword}
+            />
+            <Pressable
+              style={styles.eyeButton}
+              onPress={() => setShowPassword((prev) => !prev)}
+              hitSlop={8}
+            >
+              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color="#B2B2B2" />
+            </Pressable>
+          </View>
 
-          <Pressable style={styles.primaryButton} onPress={() => navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] })}>
-            <Text style={styles.primaryButtonText}>LOGIN</Text>
+          <Pressable style={styles.primaryButton} onPress={handleLogin} disabled={isSubmitting}>
+            <Text style={styles.primaryButtonText}>{isSubmitting ? 'PLEASE WAIT...' : 'LOGIN'}</Text>
           </Pressable>
 
           <Pressable style={styles.secondaryWrap} onPress={() => navigation.navigate('Signup')}>
             <Text style={styles.secondaryText}>NEW HERE? SIGN UP</Text>
+            <View style={styles.secondaryUnderline} />
+          </Pressable>
+          <Pressable style={styles.secondaryWrap} onPress={handleResendVerification} disabled={isSubmitting}>
+            <Text style={styles.secondaryText}>RESEND VERIFICATION EMAIL</Text>
             <View style={styles.secondaryUnderline} />
           </Pressable>
         </View>
@@ -84,6 +178,12 @@ export default function LoginScreen({ navigation }) {
           </Pressable>
         </View>
       </ScrollView>
+      <AppPopup
+        visible={popup.visible}
+        title={popup.title}
+        message={popup.message}
+        onClose={closePopup}
+      />
     </SafeAreaView>
   );
 }
@@ -136,15 +236,15 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     color: '#838383',
-    fontSize: 23 / 2,
+    fontSize: 13,
     fontWeight: '700',
     letterSpacing: 1.1,
-    lineHeight: 18,
+    lineHeight: 20,
     marginTop: 10,
   },
   subtitleCompact: {
-    fontSize: 10,
-    lineHeight: 16,
+    fontSize: 12,
+    lineHeight: 18,
   },
   formWrap: {
     marginTop: 26,
@@ -154,7 +254,7 @@ const styles = StyleSheet.create({
   },
   label: {
     color: '#8C8C8C',
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 1.8,
     marginBottom: 8,
@@ -165,9 +265,22 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     minHeight: 50,
     paddingHorizontal: 14,
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
     letterSpacing: 0.4,
+  },
+  passwordWrap: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  passwordInput: {
+    paddingRight: 44,
+  },
+  eyeButton: {
+    position: 'absolute',
+    right: 12,
+    height: '100%',
+    justifyContent: 'center',
   },
   primaryButton: {
     marginTop: 28,
@@ -178,7 +291,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: '#101010',
-    fontSize: 16 / 2,
+    fontSize: 12,
     fontWeight: '800',
     letterSpacing: 1.8,
   },
@@ -188,7 +301,7 @@ const styles = StyleSheet.create({
   },
   secondaryText: {
     color: '#A5A5A5',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1.1,
   },
@@ -236,7 +349,7 @@ const styles = StyleSheet.create({
   },
   authLabel: {
     color: '#AAAAAA',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1,
   },

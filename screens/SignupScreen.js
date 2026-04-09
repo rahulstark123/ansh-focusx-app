@@ -2,6 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState } from 'react';
+import { syncSupabaseSessionToBackend } from '../utils/auth';
+import { supabase } from '../utils/supabase';
+import AppPopup from '../components/AppPopup';
 
 export default function SignupScreen({ navigation }) {
   const { width, height } = useWindowDimensions();
@@ -10,6 +13,70 @@ export default function SignupScreen({ navigation }) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [popup, setPopup] = useState({ visible: false, title: '', message: '' });
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const showPopup = (title, message) => setPopup({ visible: true, title, message });
+  const closePopup = () => setPopup((prev) => ({ ...prev, visible: false }));
+
+  const handleSignup = async () => {
+    const payload = {
+      fullName: fullName.trim(),
+      email: email.trim().toLowerCase(),
+      password,
+    };
+
+    if (!payload.fullName) {
+      showPopup('Invalid full name', 'Please enter your full name.');
+      return;
+    }
+    if (!payload.email || !emailRegex.test(payload.email)) {
+      showPopup('Invalid email', 'Please enter a valid email address.');
+      return;
+    }
+    if (!payload.password || payload.password.length < 8) {
+      showPopup('Weak password', 'Password must be at least 8 characters.');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const { data, error } = await supabase.auth.signUp({
+        email: payload.email,
+        password: payload.password,
+        options: { data: { full_name: payload.fullName } },
+      });
+      if (error) throw error;
+
+      if (!data?.session?.access_token) {
+        showPopup('Verify your email', `Verification link sent to ${payload.email}. Please verify, then login.`);
+        return;
+      }
+
+      await syncSupabaseSessionToBackend({
+        fullName: payload.fullName,
+        accessToken: data.session.access_token,
+      });
+      navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
+    } catch (error) {
+      const msg = String(error?.message || '').toLowerCase();
+      if (msg.includes('already registered') || msg.includes('email already exists') || msg.includes('signup_conflict')) {
+        showPopup('Signup failed', 'This email is already registered. Please login instead.');
+      } else if (msg.includes('fullname already exists')) {
+        showPopup('Signup failed', 'This full name is already linked to another account.');
+      } else if (msg.includes('400') || msg.includes('required')) {
+        showPopup('Signup failed', 'Please fill full name, email and password correctly.');
+      } else if (msg.includes('email rate limit exceeded')) {
+        showPopup('Try again later', 'Too many requests. Please wait and retry.');
+      } else {
+        showPopup('Signup failed', 'Unable to sign up right now. Please try again.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
@@ -58,18 +125,27 @@ export default function SignupScreen({ navigation }) {
           />
 
           <Text style={styles.label}>PASSWORD</Text>
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            style={styles.input}
-            placeholder="MIN 8 CHARACTERS"
-            placeholderTextColor="#5F5F5F"
-            selectionColor="#FFFFFF"
-            secureTextEntry
-          />
+          <View style={styles.passwordWrap}>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              style={[styles.input, styles.passwordInput]}
+              placeholder="MIN 8 CHARACTERS"
+              placeholderTextColor="#5F5F5F"
+              selectionColor="#FFFFFF"
+              secureTextEntry={!showPassword}
+            />
+            <Pressable
+              style={styles.eyeButton}
+              onPress={() => setShowPassword((prev) => !prev)}
+              hitSlop={8}
+            >
+              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={18} color="#B2B2B2" />
+            </Pressable>
+          </View>
 
-          <Pressable style={styles.primaryButton} onPress={() => navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] })}>
-            <Text style={styles.primaryButtonText}>COMMENCE</Text>
+          <Pressable style={styles.primaryButton} onPress={handleSignup} disabled={isSubmitting}>
+            <Text style={styles.primaryButtonText}>{isSubmitting ? 'PLEASE WAIT...' : 'COMMENCE'}</Text>
           </Pressable>
 
           <Pressable style={styles.secondaryWrap} onPress={() => navigation.navigate('Login')}>
@@ -95,6 +171,12 @@ export default function SignupScreen({ navigation }) {
           </View>
         </View>
       </ScrollView>
+      <AppPopup
+        visible={popup.visible}
+        title={popup.title}
+        message={popup.message}
+        onClose={closePopup}
+      />
     </SafeAreaView>
   );
 }
@@ -179,6 +261,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0.4,
+  },
+  passwordWrap: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  passwordInput: {
+    paddingRight: 44,
+  },
+  eyeButton: {
+    position: 'absolute',
+    right: 12,
+    height: '100%',
+    justifyContent: 'center',
   },
   primaryButton: {
     marginTop: 24,

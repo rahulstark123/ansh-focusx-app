@@ -7,8 +7,12 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { enableScreens } from 'react-native-screens';
 import ActiveSessionScreen from './screens/ActiveSessionScreen';
 import FirstTimeUserScreen from './screens/FirstTimeUserScreen';
+import FeedbackScreen from './screens/FeedbackScreen';
 import FocusFormScreen from './screens/FocusFormScreen';
+import GlobalRankingScreen from './screens/GlobalRankingScreen';
 import LoginScreen from './screens/LoginScreen';
+import MyProfileScreen from './screens/MyProfileScreen';
+import SessionCompletedScreen from './screens/SessionCompletedScreen';
 import SignupScreen from './screens/SignupScreen';
 import SplashScreen from './screens/SplashScreen';
 import StreakLostScreen from './screens/StreakLostScreen';
@@ -49,10 +53,14 @@ export default function App() {
           <Stack.Screen name="Splash" component={SplashScreen} />
           <Stack.Screen name="FirstTimeUser" component={FirstTimeUserScreen} />
           <Stack.Screen name="MainTabs" component={TabNavigator} />
+          <Stack.Screen name="Feedback" component={FeedbackScreen} />
           <Stack.Screen name="FocusForm" component={FocusFormScreen} />
+          <Stack.Screen name="GlobalRanking" component={GlobalRankingScreen} />
+          <Stack.Screen name="MyProfile" component={MyProfileScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Signup" component={SignupScreen} />
           <Stack.Screen name="ActiveSession" component={ActiveSessionScreen} />
+          <Stack.Screen name="SessionCompleted" component={SessionCompletedScreen} />
           <Stack.Screen name="WeakScreen" component={WeakScreen} />
           <Stack.Screen name="StreakLost" component={StreakLostScreen} />
         </Stack.Navigator>

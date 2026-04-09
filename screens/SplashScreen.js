@@ -1,27 +1,22 @@
 import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { apiFetch } from '../utils/api';
+import { syncSupabaseSessionToBackend } from '../utils/auth';
+import { supabase } from '../utils/supabase';
 
 export default function SplashScreen({ navigation }) {
   useEffect(() => {
     const timer = setTimeout(async () => {
       try {
-        const userId = await AsyncStorage.getItem('fx_user_id');
-        if (!userId) {
-          navigation.replace('FirstTimeUser');
+        const { data } = await supabase.auth.getSession();
+        if (data?.session?.access_token) {
+          await syncSupabaseSessionToBackend();
+          navigation.replace('MainTabs');
           return;
         }
-
-        const userState = await apiFetch(`/auth/users/${userId}/first-time`);
-        if (userState.firstTime) {
-          navigation.replace('FirstTimeUser');
-        } else {
-          navigation.replace('MainTabs');
-        }
+        navigation.replace('Login');
       } catch (_error) {
-        navigation.replace('FirstTimeUser');
+        navigation.replace('Login');
       }
     }, 1700);
 

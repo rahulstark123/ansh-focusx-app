@@ -1,14 +1,11 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 export default function HomeHeader() {
   return (
     <View style={styles.container}>
       <View style={styles.iconButton} />
       <Text style={styles.brand}>FOCUSX</Text>
-      <Pressable style={styles.iconButton}>
-        <Ionicons name="person-circle-outline" size={20} color="#FFFFFF" />
-      </Pressable>
+      <View style={styles.iconButton} />
     </View>
   );
 }

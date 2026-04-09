@@ -1,6 +1,9 @@
-import { Ionicons } from '@expo/vector-icons';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useCallback, useMemo, useState } from 'react';
+import { apiFetch } from '../utils/api';
+import { storageGetItem } from '../utils/storage';
 
 function MetricSection({ label, title, value }) {
   return (
@@ -16,18 +19,78 @@ export default function AnalyticsScreen() {
   const { width, height } = useWindowDimensions();
   const isCompact = width < 390 || height < 800;
   const insets = useSafeAreaInsets();
+  const [metrics, setMetrics] = useState({
+    totalStartedSessions: 0,
+    successfulCompletedSessions: 0,
+    failedSessions: 0,
+    longestSessionMinutes: 0,
+    totalFocusHours: 0,
+  });
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [currentRank, setCurrentRank] = useState(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      const loadAnalytics = async () => {
+        try {
+          const userId = await storageGetItem('fx_user_id');
+          if (!userId) {
+            return;
+          }
+          const analytics = await apiFetch(`/analytics/${userId}`);
+          const ranking = await apiFetch(`/rankings/${userId}`);
+          if (!active) {
+            return;
+          }
+          setMetrics({
+            totalStartedSessions: Number(analytics?.totalStartedSessions || 0),
+            successfulCompletedSessions: Number(analytics?.successfulCompletedSessions || 0),
+            failedSessions: Number(analytics?.failedSessions || 0),
+            longestSessionMinutes: Number(analytics?.longestSessionMinutes || 0),
+            totalFocusHours: Number(analytics?.totalFocusHours || 0),
+          });
+          setLeaderboard(Array.isArray(ranking?.leaderboard) ? ranking.leaderboard.slice(0, 7) : []);
+          setCurrentRank(ranking?.currentUserRank || null);
+        } catch (_error) {
+          if (active) {
+            setMetrics({
+              totalStartedSessions: 0,
+              successfulCompletedSessions: 0,
+              failedSessions: 0,
+              longestSessionMinutes: 0,
+              totalFocusHours: 0,
+            });
+            setLeaderboard([]);
+            setCurrentRank(null);
+          }
+        }
+      };
+
+      loadAnalytics();
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
+  const longestSessionText = useMemo(() => {
+    const mins = metrics.longestSessionMinutes;
+    const hours = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    if (hours <= 0) {
+      return `${remMins}m`;
+    }
+    return `${hours}h ${remMins}m`;
+  }, [metrics.longestSessionMinutes]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <View style={[styles.topFixed, { paddingHorizontal: isCompact ? 14 : 18 }]}>
         <View style={styles.header}>
-          <Pressable style={styles.iconButton}>
-            <Ionicons name="menu" size={18} color="#FFFFFF" />
-          </Pressable>
+          <View style={styles.iconButton} />
           <Text style={styles.brand}>FOCUSX</Text>
-          <Pressable style={styles.iconButton}>
-            <Ionicons name="person-circle-outline" size={18} color="#FFFFFF" />
-          </Pressable>
+          <View style={styles.iconButton} />
         </View>
 
         <View style={styles.heroWrap}>
@@ -45,24 +108,51 @@ export default function AnalyticsScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <MetricSection label="CURRENT PERFORMANCE" title="CURRENT STREAK" value="Day 7" />
-        <MetricSection label="HISTORICAL PEAK" title="LONGEST STREAK" value="Day 21" />
-        <MetricSection label="ACCUMULATED LABOR" title="TOTAL FOCUS HOURS" value="142h" />
+        <MetricSection
+          label="SESSION SUMMARY"
+          title="TOTAL FOCUS"
+          value={String(metrics.totalStartedSessions)}
+        />
+        <MetricSection
+          label="SESSION SUMMARY"
+          title="SUCCESSFUL COMPLETED"
+          value={String(metrics.successfulCompletedSessions)}
+        />
+        <MetricSection
+          label="SESSION SUMMARY"
+          title="FAILED SESSIONS"
+          value={String(metrics.failedSessions)}
+        />
+        <MetricSection
+          label="SESSION SUMMARY"
+          title="LONGEST SESSION"
+          value={longestSessionText}
+        />
+        <MetricSection
+          label="SESSION SUMMARY"
+          title="TOTAL FOCUS HOURS"
+          value={`${metrics.totalFocusHours}h`}
+        />
 
         <View style={styles.eliteCard}>
           <View style={styles.eliteLeft}>
-            <Text style={styles.eliteHeading}>ELITE</Text>
-            <Text style={styles.eliteHeading}>STATUS:</Text>
-            <Text style={styles.eliteHeading}>ACTIVE</Text>
-            <Text style={styles.eliteBody}>YOU ARE IN THE TOP 2%</Text>
-            <Text style={styles.eliteBody}>OF FOCUSED PERFORMERS</Text>
-            <Text style={styles.eliteBody}>TODAY.</Text>
+            <Text style={styles.eliteHeading}>RANKING STATUS</Text>
+            <Text style={styles.eliteBody}>
+              {currentRank
+                ? `YOU: #${currentRank.rankPosition} • ${currentRank.rankLevel} • ${currentRank.totalFocusHours}h`
+                : 'YOU: #0 • INITIATE • 0h'}
+            </Text>
           </View>
+        </View>
 
-          <Pressable style={styles.shareButton}>
-            <Text style={styles.shareButtonText}>SHARE</Text>
-            <Text style={styles.shareButtonText}>PROGRESS</Text>
-          </Pressable>
+        <View style={styles.rankTable}>
+          <Text style={styles.rankTableTitle}>GLOBAL LEADERBOARD (TOP 7)</Text>
+          {leaderboard.map((entry) => (
+            <View key={entry.userId} style={styles.rankRow}>
+              <Text style={styles.rankRowLeft}>{`#${entry.rankPosition}  ${entry.fullName}`}</Text>
+              <Text style={styles.rankRowRight}>{`${entry.totalFocusHours}h  •  ${entry.rankLevel}`}</Text>
+            </View>
+          ))}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -100,7 +190,7 @@ const styles = StyleSheet.create({
   },
   brand: {
     color: '#FFFFFF',
-    fontSize: 22 / 2,
+    fontSize: 13,
     fontWeight: '700',
     letterSpacing: 1,
   },
@@ -109,14 +199,14 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     color: '#FFFFFF',
-    fontSize: 68 / 2,
+    fontSize: 36,
     fontWeight: '800',
-    lineHeight: 36,
+    lineHeight: 38,
     letterSpacing: 0.5,
   },
   heroTitleCompact: {
-    fontSize: 30,
-    lineHeight: 32,
+    fontSize: 32,
+    lineHeight: 34,
   },
   heroLine: {
     width: 88,
@@ -132,21 +222,21 @@ const styles = StyleSheet.create({
   },
   metricLabel: {
     color: '#9B9B9B',
-    fontSize: 8.5,
+    fontSize: 10.5,
     fontWeight: '700',
     letterSpacing: 2.7,
     marginBottom: 8,
   },
   metricTitle: {
     color: '#FFFFFF',
-    fontSize: 22 / 2,
+    fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.9,
     marginBottom: 2,
   },
   metricValue: {
     color: '#FFFFFF',
-    fontSize: 76 / 2,
+    fontSize: 40,
     fontWeight: '800',
     letterSpacing: 0.2,
   },
@@ -160,7 +250,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    minHeight: 124,
+    minHeight: 90,
   },
   eliteLeft: {
     flexShrink: 1,
@@ -180,20 +270,39 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     lineHeight: 12,
   },
-  shareButton: {
-    backgroundColor: '#FFFFFF',
-    minWidth: 104,
+  rankTable: {
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: '#202020',
+    backgroundColor: '#111111',
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 26,
+    paddingVertical: 8,
   },
-  shareButtonText: {
-    color: '#111111',
-    fontSize: 15 / 2,
-    fontWeight: '800',
-    letterSpacing: 1.1,
-    lineHeight: 11,
+  rankTableTitle: {
+    color: '#B1B1B1',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    marginBottom: 6,
+  },
+  rankRow: {
+    minHeight: 34,
+    borderTopWidth: 1,
+    borderTopColor: '#242424',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  rankRowLeft: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
+  rankRowRight: {
+    color: '#AFAFAF',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.4,
   },
 });

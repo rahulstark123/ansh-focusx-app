@@ -1,11 +1,81 @@
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { apiFetch } from '../utils/api';
 
-export default function ActiveSessionScreen({ navigation }) {
+function formatTime(totalSeconds) {
+  const safe = Math.max(0, totalSeconds);
+  const mins = Math.floor(safe / 60);
+  const secs = safe % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+export default function ActiveSessionScreen({ navigation, route }) {
   const { width, height } = useWindowDimensions();
   const isCompact = width < 390 || height < 800;
   const insets = useSafeAreaInsets();
+  const objective = String(route?.params?.objective || 'DEEP WORK');
+  const mode = String(route?.params?.mode || 'focus');
+  const initialSeconds = Number(route?.params?.plannedSeconds || 1500);
+  const [remainingSeconds, setRemainingSeconds] = useState(initialSeconds);
+  const completionTriggeredRef = useRef(false);
+
+  useEffect(() => {
+    setRemainingSeconds(initialSeconds);
+  }, [initialSeconds]);
+
+  useEffect(() => {
+    if (remainingSeconds <= 0) {
+      return undefined;
+    }
+    const tick = setInterval(() => {
+      setRemainingSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(tick);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [remainingSeconds]);
+
+  useEffect(() => {
+    if (remainingSeconds !== 0 || completionTriggeredRef.current) {
+      return;
+    }
+    completionTriggeredRef.current = true;
+
+    let mounted = true;
+    const completeSession = async () => {
+      try {
+        const sessionId = route?.params?.sessionId;
+        if (sessionId) {
+          await apiFetch(`/sessions/${sessionId}/complete`, {
+            method: 'POST',
+          });
+        }
+      } catch (_error) {
+        // Keep UX moving even if completion API fails.
+      } finally {
+        if (mounted) {
+          navigation.navigate('SessionCompleted', {
+            objective,
+            mode,
+          });
+        }
+      }
+    };
+
+    completeSession();
+    return () => {
+      mounted = false;
+    };
+  }, [remainingSeconds, navigation, objective, mode, route?.params?.sessionId]);
+
+  const modeLabel = useMemo(() => (mode === 'hyper' ? 'HYPER FOCUS' : 'FOCUS'), [mode]);
+  const objectiveLabel = useMemo(() => objective.toUpperCase(), [objective]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -16,8 +86,17 @@ export default function ActiveSessionScreen({ navigation }) {
         </View>
 
         <View style={styles.centerWrap}>
-          <Text style={[styles.timer, isCompact && styles.timerCompact]}>42:18</Text>
-          <Text style={[styles.metaText, isCompact && styles.metaTextCompact]}>SESSION   •   DEEP WORK</Text>
+          <Text
+            style={[styles.timer, isCompact && styles.timerCompact]}
+            numberOfLines={1}
+            ellipsizeMode="clip"
+            allowFontScaling={false}
+          >
+            {formatTime(remainingSeconds)}
+          </Text>
+          <Text style={[styles.metaText, isCompact && styles.metaTextCompact]}>
+            {`${modeLabel}   •   ${objectiveLabel}`}
+          </Text>
         </View>
 
         <View style={[styles.bottomWrap, { marginBottom: 52 + insets.bottom }]}>
@@ -26,7 +105,11 @@ export default function ActiveSessionScreen({ navigation }) {
 
           <Pressable
             style={[styles.quitButton, isCompact && styles.quitButtonCompact]}
-            onPress={() => navigation.navigate('WeakScreen')}
+            onPress={() =>
+              navigation.navigate('WeakScreen', {
+                sessionId: route?.params?.sessionId,
+              })
+            }
           >
             <Text style={[styles.quitLabel, isCompact && styles.quitLabelCompact]}>QUIT SESSION</Text>
           </Pressable>
@@ -76,14 +159,17 @@ const styles = StyleSheet.create({
   },
   timer: {
     color: '#FFFFFF',
-    fontSize: 98,
+    fontSize: 88,
     fontWeight: '800',
     letterSpacing: 0.4,
-    lineHeight: 104,
+    lineHeight: 94,
+    textAlign: 'center',
+    includeFontPadding: false,
+    minWidth: 220,
   },
   timerCompact: {
-    fontSize: 84,
-    lineHeight: 90,
+    fontSize: 76,
+    lineHeight: 82,
   },
   metaText: {
     color: '#A8A8A8',

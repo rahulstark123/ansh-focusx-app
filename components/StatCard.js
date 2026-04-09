@@ -9,11 +9,11 @@ function StatBlock({ title, value, isLast, compact }) {
   );
 }
 
-export default function StatCard({ compact = false }) {
+export default function StatCard({ compact = false, completedStreaks = 0, todayText = '0h 0m' }) {
   return (
     <View style={styles.card}>
-      <StatBlock title="CURRENT STREAK" value="Day 7" compact={compact} />
-      <StatBlock title="TODAY" value="2h 10m" compact={compact} isLast />
+      <StatBlock title="COMPLETED STREAKS" value={String(completedStreaks)} compact={compact} />
+      <StatBlock title="TODAY" value={todayText} compact={compact} isLast />
     </View>
   );
 }

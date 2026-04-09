@@ -2,13 +2,74 @@ import { Ionicons } from '@expo/vector-icons';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
+import AppPopup from '../components/AppPopup';
+import { apiFetch } from '../utils/api';
+import { storageGetItem } from '../utils/storage';
 
-export default function FocusFormScreen({ navigation }) {
+export default function FocusFormScreen({ navigation, route }) {
   const [objective, setObjective] = useState('');
   const [mode, setMode] = useState('focus');
   const [showInfo, setShowInfo] = useState(false);
+  const [popup, setPopup] = useState({ visible: false, title: '', message: '' });
   const { width, height } = useWindowDimensions();
   const isCompact = width < 390 || height < 800;
+  const plannedSeconds = Number(route?.params?.plannedSeconds || 1500);
+
+  const [isStarting, setIsStarting] = useState(false);
+
+  const handleBegin = async () => {
+    if (isStarting) {
+      return;
+    }
+
+    const cleanObjective = objective.trim();
+    if (!cleanObjective) {
+      setPopup({
+        visible: true,
+        title: 'Session objective required',
+        message: 'Please enter a session objective before you begin.',
+      });
+      return;
+    }
+
+    try {
+      setIsStarting(true);
+      const userId = await storageGetItem('fx_user_id');
+      if (!userId) {
+        setPopup({
+          visible: true,
+          title: 'Session start failed',
+          message: 'User not found. Please login again.',
+        });
+        return;
+      }
+
+      const session = await apiFetch('/sessions/start', {
+        method: 'POST',
+        body: JSON.stringify({
+          userId,
+          objective: cleanObjective,
+          mode: mode === 'hyper' ? 'HYPER_FOCUS' : 'FOCUS',
+          plannedSeconds,
+        }),
+      });
+
+      navigation.navigate('ActiveSession', {
+        objective: cleanObjective,
+        mode,
+        plannedSeconds,
+        sessionId: session.id,
+      });
+    } catch (_error) {
+      setPopup({
+        visible: true,
+        title: 'Session start failed',
+        message: 'Could not create session record. Please try again.',
+      });
+    } finally {
+      setIsStarting(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -50,9 +111,12 @@ export default function FocusFormScreen({ navigation }) {
 
         <Pressable
           style={[styles.beginButton, isCompact && styles.beginButtonCompact]}
-          onPress={() => navigation.navigate('ActiveSession')}
+          onPress={handleBegin}
+          disabled={isStarting}
         >
-          <Text style={[styles.beginLabel, isCompact && styles.beginLabelCompact]}>BEGIN</Text>
+          <Text style={[styles.beginLabel, isCompact && styles.beginLabelCompact]}>
+            {isStarting ? 'STARTING...' : 'BEGIN'}
+          </Text>
         </Pressable>
 
         <Pressable
@@ -85,6 +149,12 @@ export default function FocusFormScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+      <AppPopup
+        visible={popup.visible}
+        title={popup.title}
+        message={popup.message}
+        onClose={() => setPopup((prev) => ({ ...prev, visible: false }))}
+      />
     </SafeAreaView>
   );
 }

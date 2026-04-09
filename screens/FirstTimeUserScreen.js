@@ -1,44 +1,57 @@
-import { Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { apiFetch } from '../utils/api';
+import { API_BASE_URL, apiFetch } from '../utils/api';
+import { storageSetItem } from '../utils/storage';
 
 export default function FirstTimeUserScreen({ navigation }) {
   const { width, height } = useWindowDimensions();
   const isCompact = width < 390 || height < 800;
   const [fullName, setFullName] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleContinue = async () => {
-    const cleanName = fullName.trim();
-    if (!cleanName) {
+    if (isSubmitting) {
       return;
     }
 
-    let user;
+    const cleanName = fullName.trim();
+    if (!cleanName) {
+      Alert.alert('Name required', 'Please enter your full name to continue.');
+      return;
+    }
+
     try {
-      user = await apiFetch('/users/create', {
-        method: 'POST',
-        body: JSON.stringify({ fullName: cleanName }),
-      });
-    } catch (_error) {
-      user = await apiFetch('/auth/name-login', {
-        method: 'POST',
-        body: JSON.stringify({ fullName: cleanName }),
-      });
+      setIsSubmitting(true);
+      let user;
+      try {
+        user = await apiFetch('/users/create', {
+          method: 'POST',
+          body: JSON.stringify({ fullName: cleanName }),
+        });
+      } catch (_error) {
+        user = await apiFetch('/auth/name-login', {
+          method: 'POST',
+          body: JSON.stringify({ fullName: cleanName }),
+        });
+      }
+
+      await storageSetItem('fx_user_id', user.id);
+      await storageSetItem('fx_user_name', user.fullName);
+
+      if (user.firstTime) {
+        await apiFetch('/auth/complete-first-time', {
+          method: 'POST',
+          body: JSON.stringify({ userId: user.id }),
+        });
+      }
+
+      navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
+    } catch (error) {
+      Alert.alert('Could not continue', `${error?.message || 'Unknown error'}\nURL: ${API_BASE_URL}`);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    await AsyncStorage.setItem('fx_user_id', user.id);
-    await AsyncStorage.setItem('fx_user_name', user.fullName);
-
-    if (user.firstTime) {
-      await apiFetch('/auth/complete-first-time', {
-        method: 'POST',
-        body: JSON.stringify({ userId: user.id }),
-      });
-    }
-
-    navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
   };
 
   return (
@@ -68,8 +81,12 @@ export default function FirstTimeUserScreen({ navigation }) {
             selectionColor="#FFFFFF"
           />
 
-          <Pressable style={styles.primaryButton} onPress={handleContinue}>
-            <Text style={styles.primaryButtonText}>CONTINUE</Text>
+          <Pressable
+            style={[styles.primaryButton, isSubmitting && styles.primaryButtonDisabled]}
+            onPress={handleContinue}
+            disabled={isSubmitting}
+          >
+            <Text style={styles.primaryButtonText}>{isSubmitting ? 'PLEASE WAIT...' : 'CONTINUE'}</Text>
           </Pressable>
         </View>
       </View>
@@ -160,6 +177,9 @@ const styles = StyleSheet.create({
     minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  primaryButtonDisabled: {
+    opacity: 0.7,
   },
   primaryButtonText: {
     color: '#101010',
